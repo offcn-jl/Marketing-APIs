@@ -1,0 +1,145 @@
+
+# 基础 ( 通用 ) Serverless 配置
+
+# VPC ( 按需选择, 如不需要打通已有 VPC , 则使用此部分的配置 )
+# ChaosServerlessVPC:
+#   component: '@serverless/tencent-vpc'
+#   # refer to: https://github.com/serverless-components/tencent-vpc/blob/master/docs/configure.md
+#   inputs:
+#     region: ${env.REGION}
+#     zone: ${env.ZONE}
+#     vpcName: ChaosServerlessVPC
+#     subnetName: ChaosServerlessSubnet
+
+# PostgreSQL for Serverless（ServerlessDB）
+ChaosServerlessPostgreSQL:
+  component: '@serverless/tencent-postgresql'
+  # refer to: https://github.com/serverless-components/tencent-postgresql/blob/master/docs/configure.md
+  inputs:
+    region: ${env.REGION} # 地域
+    zone: ${env.ZONE} # 可用区
+    dBInstanceName: *CPSIN
+    extranetAccess: true
+    vpcConfig:
+      # vpcId: ${vpc.vpcId} # 如不需要打通已有 VPC , 则使用此部分的配置
+      # subnetId: ${vpc.subnetId} # 如不需要打通已有 VPC , 则使用此部分的配置
+      vpcId: ${env.ChaosVPC} # 如需要打通已有 VPC 则需要手动配置, 此处引用 .env 文件中手动配置的内容 https://console.cloud.tencent.com/vpc/vpc
+      subnetId: ${env.ChaosSubnet} # 如需要打通已有 VPC 则需要手动配置, 此处引用 .env 文件中手动配置的内容
+
+# API 网关
+ChaosServerlessAPIGateway:
+  component: '@serverless/tencent-apigateway'
+  # https://github.com/serverless-components/tencent-apigateway/blob/master/docs/configure.md#customDomain-param-description
+  inputs:
+    region: ${env.REGION} # 地域
+    protocols:
+      - https
+    serviceName: ChaosServerlessAPIGateway # 服务名称
+    description: API 网关 # 描述
+    environment: *AGE # 发布环境
+    # customDomain: # 自定义域名, 可选, 按需配置
+    #   - domain: abc.com # 域名
+    #     # if you want add https, set cettificateId in tencent cloud ssl certificate
+    #     certificateId: abcdefg # SSL 证书 ID
+    #     # if you want to set custom path map, set to 'FALSE' string, not boolean FALSE
+    #     isDefaultMapping: 'FALSE' # 是否开启自定义路径映射
+    #     pathMappingSet: # 自定义路径映射规则
+    #       - path: /
+    #         environment: release
+    #     protocols: # 协议
+    #       - http
+    #       - https
+    endpoints: # API 配置 ( 每个函数的 path 等设置均在此处进行设置，而在函数侧进行设置，避免 ApiGateway 的名称设置被覆盖 )
+      - path: /2020/gift/{Name}/surplus
+        method: GET
+        description: 奖品领取接口 - 获取剩余数量
+        enableCORS: FALSE # 跨域配置
+        responseType: JSON # 响应类型，目前API网关对于响应结果不做处理，直接透传给请求者。在生成SDK文档时，填写的响应示例也会一并展示在文档中，它将会更好的帮助使用者理解接口含义。
+        serviceTimeout: 120 # 超时设置
+        param:
+          - name: Name
+            position: PATH
+            required: 'TRUE'
+            type: string
+            # defaultValue: 默认 # 默认值
+            desc: 奖品名称
+        function:
+          functionName: ChaosGiftGetCount # 云函数名称
+          isIntegratedResponse: TRUE # 响应集成
+          functionQualifier: $LATEST # 函数版本
+        # usagePlan: # 使用计划
+        #     usagePlanId: 1111
+        #     usagePlanName: slscmp
+        #     usagePlanDesc: sls create
+        #     maxRequestNum: 1000
+      - path: /apps/version-control/version/get/{AppID}
+        method: GET
+        description: 版本控制接口 - 获取版本信息
+        enableCORS: FALSE
+        responseType: JSON
+        serviceTimeout: 120
+        param:
+          - name: AppID
+            position: PATH
+            required: 'TRUE'
+            type: string
+            desc: 应用ID
+        function:
+          functionName: GetAppVersion
+          isIntegratedResponse: TRUE
+          functionQualifier: $LATEST
+
+# 云函数通用 Evn
+# https://blog.csdn.net/weixin_42252770/article/details/99705112
+ChaosServerlessCloudFunctionEnvironment: &CSCFTEnv
+  PostgreSQLHost: ${ChaosServerlessPostgreSQL.public.host}
+  PostgreSQLPort: ${ChaosServerlessPostgreSQL.public.port}
+  PostgreSQLUser: ${ChaosServerlessPostgreSQL.public.user}
+  PostgreSQLDBName: ${ChaosServerlessPostgreSQL.public.dbname}
+  PostgreSQLPassword: ${ChaosServerlessPostgreSQL.public.password}
+  PostgreSQLSSLMode: disable
+
+# 云函数通用 inputs
+ChaosServerlessCloudFunctionInputs: &CSCFInputs
+  enableRoleAuth: true # 启用角色和策略
+  handler: main # 入口
+  runtime: Go1 # 运行环境
+  region: ${env.REGION} # 地域
+  memorySize: 64 # 内存大小
+  timeout: 120 # 超时时间
+
+# 云函数
+# https://github.com/serverless-components/tencent-scf/blob/master/docs/configure.md
+# 奖品领取接口 - 获取剩余数量
+ChaosGiftGetCount:
+  component: "@serverless/tencent-scf"
+  inputs:
+    <<: *CSCFInputs
+    name: ChaosGiftGetCount # 函数名称
+    description: 奖品领取接口 # 描述
+    codeUri: scf/gift/get-surplus # 代码路径
+    exclude: # 排除文件
+      - ./scf/gift/get-surplus/main.go
+    # include: # 包含文件, 如果是相对路径，则应相对于serverless.yml
+    #   - main
+    environment: # 环境变量
+      variables: # 环境变量数组
+        <<: *CSCFTEnv
+        timeout: 20 # 超时时间
+        TEST: value
+
+# 版本控制接口 - 获取版本信息
+GetAppVersion:
+  component: "@serverless/tencent-scf"
+  inputs:
+    <<: *CSCFInputs
+    name: GetAppVersion # 函数名称
+    description: 版本控制接口 - 获取版本信息 # 描述
+    codeUri: scf/apps/version-control/version/get # 代码路径
+    exclude: # 排除文件
+      - scf/apps/version-control/version/get/main.go
+    # include: # 包含文件, 如果是相对路径，则应相对于serverless.yml
+    #   - main
+    environment: # 环境变量
+      variables: # 环境变量数组
+        <<: *CSCFTEnv
