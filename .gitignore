@@ -14,7 +14,7 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
-# Goland
+# Goland 项目配置, 可能泄露 Token 信息 ( workspace.xml 中保存了 built 时配置的 envs )
 .idea
 
 # MacOS
