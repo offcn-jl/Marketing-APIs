@@ -1,0 +1,5 @@
+
+# release 环境的 Serverless 配置
+
+CurrentPostgreSQLInstanceName: &CPSIN ChaosServerlessPostgreSQL
+ApiGatewayEnvironment: &AGE release

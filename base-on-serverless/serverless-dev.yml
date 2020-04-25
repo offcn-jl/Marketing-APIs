@@ -1,0 +1,5 @@
+
+# test 环境的 Serverless 配置
+
+CurrentPostgreSQLInstanceName: &CPSIN ChaosServerlessTestPostgreSQL
+ApiGatewayEnvironment: &AGE test
